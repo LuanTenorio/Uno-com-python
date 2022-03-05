@@ -3,9 +3,9 @@ from time import sleep
 class Deck():
     def __init__(self):
         self.cards = {}
-        COLORS = ['red', 'green', 'blue', 'yellow', 'black']
+        self.COLORS = ['red', 'green', 'blue', 'yellow', 'black']
         TYPECARDS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'block', 'return', 'plus 2']
-        for color in COLORS:
+        for color in self.COLORS:
             if(color != 'black'):
                 self.cards.update({color: [f'{card}:{color}' for card in TYPECARDS] + [f'{card}:{color}' for card in TYPECARDS]})
         self.cards.update({'black': []})
@@ -79,6 +79,8 @@ class Deck():
             codeColor = '33'
         elif (color == 'blue'):
             codeColor = '34'
+        else:
+            codeColor = '0'
         return f'\033[1;{codeColor}m{card}\033[m'
 
 class Player(Deck):
@@ -93,8 +95,39 @@ class Player(Deck):
     def formatCards(self):
         return ', '.join(self.cards)
 
+    def checkWin(self):
+        print('check innn')
+        print(len(self.cards))
+        return True if len(self.cards) == 0 else False
+
+    def redirectPurchase(self, lastCard, amtCard, lastPlus):
+        if(lastCard != ''):
+            lastCard = lastCard.split(':')
+            #update-color
+            print(f"help: {[card for card in self.cards if card.split(':')[1] == lastCard[1] or card.split(':')[0] == lastCard[0]]}")
+            lenCards = len([card for card in self.cards if card.split(':')[1] == lastCard[1] or card.split(':')[0] == lastCard[0]])
+            lenCards = 1
+
+            if(lenCards == 0):
+                self.buyCards()
+                print(f'you don\'t have a card', end='')
+                for x in range(3):
+                    sleep(0.45)
+                    print('.', end='')
+                sleep(0.3)
+                print('')
+                return False
+            elif 'plus' in lastCard[0] and lastPlus == False:
+                return self.buyPlayCard(amtCard)
+            else:
+                return self.playCard()
+        else:
+            return self.playCard()
+
+
     #get the card, if she exist strip of self.cards and return card
     def playCard(self):
+        print('playy')
         print('\033[1;36mMy Cards\033[m')
         print('\033[1;36m=\033[m' * (len(self.cards) * 12))
         for x in self.cards:
@@ -102,7 +135,7 @@ class Player(Deck):
         print('')
         print('\033[1;36m=\033[m' * (len(self.cards) * 12))
         while True:
-            card = input('What card you want Play: ')
+            card = input(f'What card you want Play ({self.id}): ')
             #card = self.checkCardValid(card)
             if((len(card.split()) == 1 and ':' not in card)): #or (card.lower() == 'plus 2' or card.lower() != 'plus 4')):
                 isEqualCard = True if [effect.split(':')[0] for effect in self.cards].count(card) == 1 else False
@@ -116,19 +149,30 @@ class Player(Deck):
             if(card in self.cards): break
             else: print('Carta não encontrada')
         self.cards.remove(card)
+        if(self.Uno()):
+            print('Está de unoooooooooooooooooooooooooooooooo')
+        if(self.checkWin()):
+            print('winnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn')
+            return True
         return card
 
     #if you have a plus, choose between play card or buy, else buy
     def buyPlayCard(self, amtCard):
+        print('buyyy')
+        print(self.cards)
         plus = [effect for effect in self.cards if 'plus' in effect]
         if (len(plus) >= 1):
             while True:
                 print(plus)
-                card = input(f'you have card of plus effect, you wuant \033[1;38mBUY\033[m {amtCard} cards or play any card of plus: ')
+                card = input(f'you have card of plus effect, you wuant \033[1;38mBUY\033[m {amtCard} cards or play any card of plus({self.id})(buy/card): ')
                 if(card in plus):
                     print('certo')
                     self.cards.remove(card)
                     return card
+                elif(card.lower() == 'buy'.lower()):
+                    self.buyCards(amtCard)
+                    print('return false')
+                    return False
                 else:
                     print('carta não encontrada')
         else:
@@ -144,17 +188,27 @@ class Player(Deck):
         self.cards += self.deck.getCards(len)
 
     def Uno(self):
-        self.uno = True if len(self.cards) == 1 else False
+        print('unoooo')
+        for x in range(3):
+            print(len(self.cards))
+        isUno = True if len(self.cards) == 1 else False
+        self.uno = isUno
+        return isUno
 
 class Game(Deck):
     def __init__(self, deck, lenPlayers):
         self.deck = deck
-        self.Players = [Player(x, deck, deck.getCards(7)) for x in range(lenPlayers)]
+        self.Players = [Player(x, deck, deck.getCards(3)) for x in range(lenPlayers)]
         self.curPlayer = 0
         self.direction = True
-        self.lastCard = str()
         self.plus = 0
-        self.sequence = []
+        self.sequence = [self.deck.getCards(1)[0]]
+        self.lastCard = self.sequence[-1]
+        self.lastPlus = False
+        self.curColor = ''
+        self.playesWin = {}
+        for x in range(len(self.Players)):
+            self.playesWin.update({f'Player {x}': 0})
 
     # skip the amount of players passed in the parameter
     def nextPlayer(self, length=1):
@@ -166,14 +220,36 @@ class Game(Deck):
             elif self.curPlayer < 0:
                 self.curPlayer == len(self.Players)
 
+    #Select the color if exist in self.deck.COLORS else return false
+    def changeColor(self, color, select=True):
+        color = color.split(':')[1] if color.find(':') != -1 else color
+        COLOR = self.deck.COLORS.copy()
+        COLOR.remove('black')
+        if(select):
+            if color in COLOR:
+                self.curColor = color
+            else:
+                print('This color is not in the game')
+                print(', '.join(COLOR))
+                return False
+        else:
+            return False
+
     #choose the card and the amount passed by the parameter, execute this function
     def specialCard(self, card, length=1):
+        for x in range(2):
+            print(card)
         card = card.split(':')[0]
         if card == 'block':
             self.nextPlayer(length)
         elif card == 'return':
             for k in range(length):
-                self.direction = False if self.direction == True else True
+                self.direction = False if self.direction else True
+        elif card == 'color':
+            while True:
+                color = input('Select the card you want: ')
+                if(self.changeColor(color) != False):
+                    break
         elif card == 'plus 2':
             self.plus += length * 2
         elif card == 'plus 4':
@@ -187,25 +263,40 @@ class Game(Deck):
 
     #play card selected of player and append adds the sequence
     def play(self):
-        if(self.plus > 1):
-            card = self.Players[self.curPlayer].buyPlayCard(self.plus)
-            if(card == False):
-                print('comprar')
-                self.buyCard(length=self.plus)
-            else:
-                self.sequence.append(card)
-                self.specialCard(card)
+        #card = self.sequence.append(self.Players[self.curPlayer].redirectPurchase(self.sequence[-1] if len(self.sequence) >= 1 else '', self.plus))
+        print(self.lastCard)
+        print(f'sequence: {self.sequence}')
+        card = self.Players[self.curPlayer]\
+            .redirectPurchase(self.sequence[-1] if len(self.sequence) >= 1 else '',
+                              self.plus,
+                              self.lastPlus)
+        if card == True:
+            print(self.pla)
+            print(self.curPlayer)
+            self.playesWin[f'Player {self.curPlayer}'] += 1
+            self.lastPlayerWin = self.curPlayer
+            return True
+        if card == False:
+            self.lastPlus = True
         else:
-            card = self.sequence.append(self.Players[self.curPlayer].playCard())
-        self.lastCard = card
+            self.lastCard = card
+            self.specialCard(card)
+            self.sequence.append(card)
+            self.lastCard = self.sequence[-1] if len(self.sequence) >= 1 else self.lastCard
+            self.changeColor(self.lastCard, False)
+            self.lastPlus = False
+        print(self.plus)
         self.nextPlayer()
 
     def winPlayer(self, player):
         self.Players[player].victory += 1
 
     def round(self):
-        self.play()
-        #while True:
+        while True:
+            #print(f'sequence: {self.sequence}')
+            if self.play():
+                print(f'Jogador {self.lastPlayerWin} ganhou')
+                break
 
 Deck = Deck()
 Game = Game(Deck, 4)
